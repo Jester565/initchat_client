@@ -28,31 +28,31 @@ func (client *Client) send(typeID string, body []byte) {
 }
 
 func (client *Client) runSend() {
-	//writer := bufio.NewWriter(*client.connection)
 	for {
 		msg := <-client.sendChannel
-		bodySize := int32(len(msg.body))
+		bodySize := int32(0)
+		if msg.body != nil {
+			bodySize = int32(len(msg.body))
+		}
 		header := &Messages.Header{Id: msg.typeID, Length: bodySize}
-		log.Println("BODY SIZE: ", bodySize)
 		headerData, err := proto.Marshal(header)
 		if err != nil {
 			log.Fatal("Header Serialization Failed: ", err)
 			return
 		}
 		headerSize := uint16(len(headerData))
-		log.Println("HEADER SIZE: ", headerSize)
 		preHeaderData := make([]byte, PreHeaderLength)
 		binary.BigEndian.PutUint16(preHeaderData, headerSize)
 		data := append(preHeaderData, headerData...)
-		data = append(data, msg.body...)
-		nBytes, writeErr := (*client.connection).Write(data)
+		if msg.body != nil {
+			data = append(data, msg.body...)
+		}
+		_, writeErr := (*client.connection).Write(data)
 		//nBytes, writeErr := writer.Write(data)
-		log.Println("WROTE: ", nBytes)
 		if writeErr != nil {
 			log.Println("WriteErr: ", writeErr)
 			return
 		}
-		log.Println("SENT: ", len(data))
 	}
 }
 
@@ -85,12 +85,13 @@ func (client *Client) runRead() {
 		}
 		typeID := header.GetId()
 		bodySize := header.GetLength()
-
 		bodyData := make([]byte, bodySize)
-		_, bodyErr := io.ReadFull(reader, bodyData)
-		if bodyErr != nil {
-			log.Print("Client Disconnected", bodyErr)
-			return
+		if bodySize > 0 {
+			_, bodyErr := io.ReadFull(reader, bodyData)
+			if bodyErr != nil {
+				log.Print("Client Disconnected", bodyErr)
+				return
+			}
 		}
 
 		message := Message{typeID, bodyData, client}
