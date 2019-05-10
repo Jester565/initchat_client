@@ -1,19 +1,26 @@
 package main
 
 import (
-"bufio"
-"encoding/binary"
-"github.com/golang/protobuf/proto"
-"io"
-"log"
-"net"
-"./Messages"
+	"./Messages"
+	"bufio"
+	"crypto/tls"
+	"encoding/binary"
+	"fmt"
+	"github.com/golang/protobuf/proto"
+	"io"
+	"log"
 )
 
 var PreHeaderLength = 2
 
+type Message struct {
+	typeID string
+	body []byte
+	client *Client
+}
+
 type Client struct {
-	connection *net.Conn
+	connection *tls.Conn
 	sendChannel chan *Message
 	recvChannel chan *Message
 	disconnectChannel chan *Client
@@ -28,6 +35,7 @@ func (client *Client) send(typeID string, body []byte) {
 }
 
 func (client *Client) runSend() {
+	fmt.Println("Running send")
 	for {
 		msg := <-client.sendChannel
 		bodySize := int32(0)
@@ -47,7 +55,7 @@ func (client *Client) runSend() {
 		if msg.body != nil {
 			data = append(data, msg.body...)
 		}
-		_, writeErr := (*client.connection).Write(data)
+		_, writeErr := client.connection.Write(data)
 		//nBytes, writeErr := writer.Write(data)
 		if writeErr != nil {
 			log.Println("WriteErr: ", writeErr)
@@ -61,7 +69,7 @@ func (client *Client) onDisconnect() {
 }
 
 func (client *Client) runRead() {
-	reader := bufio.NewReader(*(*client).connection)
+	reader := bufio.NewReader((*client).connection)
 	defer client.onDisconnect()
 	for {
 		preHeaderData := make([]byte, PreHeaderLength)
